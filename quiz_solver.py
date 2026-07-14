@@ -23,15 +23,18 @@ def encode_image(file_path: str) -> str:
         return base64.b64encode(f.read()).decode("utf-8")
 
 def solve_quiz_text(content: str) -> str:
-    prompt = f"""Solve this quiz/exam. For each question:
-1. Write the question
-2. Provide the correct answer
-3. Give a brief explanation
+    prompt = f"""Solve this quiz/exam. Format your response like this:
+
+Question 1: [question text]
+Answer 1: [correct answer]
+Explanation 1: [brief explanation]
+
+Question 2: [question text]
+Answer 2: [correct answer]
+Explanation 2: [brief explanation]
 
 Quiz content:
-{content}
-
-Format the answer clearly with question numbers."""
+{content}"""
     
     response = client.chat.completions.create(
         model="llama-3.3-70b-versatile",
@@ -47,7 +50,7 @@ def solve_quiz_image(file_path: str) -> str:
         messages=[{
             "role": "user",
             "content": [
-                {"type": "text", "text": "Solve this quiz/exam shown in the image. List each question, give the correct answer, and explain briefly."},
+                {"type": "text", "text": "Solve this quiz/exam shown in the image. Format your response:\n\nQuestion 1: [question]\nAnswer 1: [answer]\nExplanation 1: [explanation]\n\nQuestion 2: [question]\nAnswer 2: [answer]\nExplanation 2: [explanation]"},
                 {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{image_data}"}}
             ]
         }],
@@ -57,13 +60,25 @@ def solve_quiz_image(file_path: str) -> str:
 
 def create_solved_document(original_name: str, solution_text: str) -> str:
     doc = Document()
-    doc.add_heading(f"Solved: {original_name}", 0)
-    doc.add_paragraph("")
+    title = doc.add_heading(f"Solved Quiz", 0)
+    doc.add_paragraph(f"Original file: {original_name}")
+    doc.add_paragraph("─" * 50)
+
     for line in solution_text.split("\n"):
-        if line.strip():
-            doc.add_paragraph(line)
-    
-    output_path = os.path.join(tempfile.gettempdir(), f"solved_{os.path.splitext(original_name)[0]}.docx")
+        stripped = line.strip()
+        if not stripped:
+            continue
+        if stripped.startswith("**") and stripped.endswith("**"):
+            doc.add_heading(stripped.strip("*"), 2)
+        elif any(stripped.lower().startswith(w) for w in ["question", "q:", "q.", "answer", "a:", "a.", "explanation", "note"]):
+            p = doc.add_paragraph()
+            runner = p.add_run(stripped)
+            runner.bold = True
+        else:
+            doc.add_paragraph(stripped)
+
+    base = os.path.splitext(original_name)[0]
+    output_path = os.path.join(tempfile.gettempdir(), f"solved_{base}.docx")
     doc.save(output_path)
     return output_path
 
