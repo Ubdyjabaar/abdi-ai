@@ -1,14 +1,16 @@
 import logging
 from datetime import datetime
+from zoneinfo import ZoneInfo
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from database import get_connection
 
 logger = logging.getLogger(__name__)
 
-scheduler = AsyncIOScheduler()
+TZ = ZoneInfo("Africa/Mogadishu")
+scheduler = AsyncIOScheduler(timezone=TZ)
 
 async def check_reminders(app):
-    now = datetime.now()
+    now = datetime.now(TZ)
     today = now.strftime("%Y-%m-%d")
     current_time = now.strftime("%H:%M")
 
