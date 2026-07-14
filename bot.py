@@ -7,6 +7,7 @@ from telegram.ext import Application, CommandHandler, MessageHandler, filters, C
 from database import init_db, add_task, get_tasks, delete_task, complete_task
 from agent import process_message
 from scheduler import start_scheduler
+from quiz_solver import solve_quiz_file
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
@@ -32,7 +33,8 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "- \"Show my tasks\"\n"
         "- \"Schedule meeting tomorrow at 3pm\"\n"
         "- \"What events do I have?\"\n"
-        "- \"Tell me a joke\"\n\n"
+        "- \"Tell me a joke\"\n"
+        "- Send a PDF quiz to get it solved\n\n"
         "Commands:\n"
         "/start - Start the bot\n"
         "/help - Show this help message"
@@ -87,6 +89,24 @@ async def delete_task_command(update: Update, context: ContextTypes.DEFAULT_TYPE
     except ValueError:
         await update.message.reply_text("Please provide a valid task ID.")
 
+async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    file = update.message.document
+    if not file.file_name.lower().endswith(".pdf"):
+        await update.message.reply_text("Please send a PDF file.")
+        return
+    await update.message.reply_text("Got your PDF! Solving the quiz...")
+    file_path = f"/tmp/{file.file_name}"
+    file_obj = await file.get_file()
+    await file_obj.download_to_drive(file_path)
+    try:
+        output_path = await solve_quiz_file(file_path, file.file_name)
+        with open(output_path, "rb") as f:
+            await update.message.reply_document(f, caption="Quiz solved! ✅")
+        os.remove(output_path)
+    except Exception as e:
+        await update.message.reply_text(f"Sorry, couldn't solve: {e}")
+    os.remove(file_path)
+
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_message = update.message.text
     user_id = update.effective_user.id
@@ -122,6 +142,7 @@ def main():
     app.add_handler(CommandHandler("tasks", list_tasks))
     app.add_handler(CommandHandler("done", done_task))
     app.add_handler(CommandHandler("deletetask", delete_task_command))
+    app.add_handler(MessageHandler(filters.Document.ALL, handle_document))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     app.add_error_handler(error_handler)
 
