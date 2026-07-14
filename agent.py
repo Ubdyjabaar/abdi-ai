@@ -8,23 +8,21 @@ from dotenv import load_dotenv
 from typing import Literal, TypedDict
 
 load_dotenv(Path(__file__).parent / ".env")
-from google import genai
-from google.genai import types
+from groq import Groq
 from langgraph.graph import StateGraph, END
 from database import add_task, get_tasks, delete_task, complete_task, add_event, get_events
 
 logger = logging.getLogger(__name__)
 
-gemini_key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
-client = genai.Client(api_key=gemini_key)
+client = Groq(api_key=os.getenv("GROQ_API_KEY"))
 
 def llm_call(prompt: str) -> str:
-    response = client.models.generate_content(
-        model="gemini-2.0-flash",
-        contents=prompt,
-        config=types.GenerateContentConfig(temperature=0.1),
+    response = client.chat.completions.create(
+        model="llama-3.3-70b-versatile",
+        messages=[{"role": "user", "content": prompt}],
+        temperature=0.1,
     )
-    return response.text
+    return response.choices[0].message.content
 
 class AgentState(TypedDict):
     user_id: int
