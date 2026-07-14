@@ -1,4 +1,5 @@
 import os
+import threading
 import logging
 from dotenv import load_dotenv
 from telegram import Update
@@ -96,7 +97,22 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     logger.error(f"Update {update} caused error {context.error}")
 
+def start_health_server():
+    port = int(os.environ.get("PORT", 8080))
+    from http.server import HTTPServer, BaseHTTPRequestHandler
+    class HealthHandler(BaseHTTPRequestHandler):
+        def do_GET(self):
+            self.send_response(200)
+            self.end_headers()
+            self.wfile.write(b"OK")
+        def log_message(self, *a):
+            pass
+    server = HTTPServer(("0.0.0.0", port), HealthHandler)
+    logger.info(f"Health server running on port {port}")
+    server.serve_forever()
+
 def main():
+    threading.Thread(target=start_health_server, daemon=True).start()
     init_db()
     app = Application.builder().token(BOT_TOKEN).post_init(start_scheduler).build()
 
