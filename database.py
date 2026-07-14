@@ -23,6 +23,16 @@ def init_db():
     """)
     conn.commit()
     cursor.execute("""
+        CREATE TABLE IF NOT EXISTS social_accounts (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            platform TEXT NOT NULL,
+            access_token TEXT NOT NULL,
+            page_id TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    """)
+    cursor.execute("""
         CREATE TABLE IF NOT EXISTS events (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             user_id INTEGER NOT NULL,
@@ -104,3 +114,25 @@ def get_events(user_id: int):
     events = [dict(row) for row in cursor.fetchall()]
     conn.close()
     return events
+
+def save_social_token(user_id: int, platform: str, access_token: str, page_id: str = None):
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute("DELETE FROM social_accounts WHERE user_id = ? AND platform = ?", (user_id, platform))
+    cursor.execute(
+        "INSERT INTO social_accounts (user_id, platform, access_token, page_id) VALUES (?, ?, ?, ?)",
+        (user_id, platform, access_token, page_id)
+    )
+    conn.commit()
+    conn.close()
+
+def get_social_accounts(user_id: int):
+    conn = get_connection()
+    cursor = conn.cursor()
+    cursor.execute(
+        "SELECT platform, access_token, page_id FROM social_accounts WHERE user_id = ?",
+        (user_id,)
+    )
+    accounts = [dict(row) for row in cursor.fetchall()]
+    conn.close()
+    return accounts

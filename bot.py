@@ -8,6 +8,8 @@ from database import init_db, add_task, get_tasks, delete_task, complete_task
 from agent import process_message
 from scheduler import start_scheduler
 from quiz_solver import solve_quiz_file
+from database import save_social_token, get_social_accounts
+from social import post_to_social
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
 logger = logging.getLogger(__name__)
@@ -34,10 +36,14 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "- \"Schedule meeting tomorrow at 3pm\"\n"
         "- \"What events do I have?\"\n"
         "- \"Tell me a joke\"\n"
-        "- Send a PDF or photo of a quiz to get it solved\n\n"
+        "- Send a PDF or photo of a quiz to get it solved\n"
+        "- Post to Facebook: \"/post facebook Hello world\"\n\n"
         "Commands:\n"
         "/start - Start the bot\n"
-        "/help - Show this help message"
+        "/help - Show this help page\n"
+        "/connect <platform> <token> - Link social account\n"
+        "/post <platform> <msg> - Post to social media\n"
+        "/myaccounts - List connected accounts"
     )
 
 async def add_task_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -88,6 +94,38 @@ async def delete_task_command(update: Update, context: ContextTypes.DEFAULT_TYPE
             await update.message.reply_text("Task not found.")
     except ValueError:
         await update.message.reply_text("Please provide a valid task ID.")
+
+async def connect_social(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if len(context.args) < 2:
+        await update.message.reply_text("Usage: /connect <platform> <token>\nPlatforms: facebook, tiktok\nFor Facebook, also provide page_id: /connect facebook <token> <page_id>")
+        return
+    platform = context.args[0].lower()
+    token = context.args[1]
+    page_id = context.args[2] if len(context.args) > 2 else None
+    user_id = update.effective_user.id
+    save_social_token(user_id, platform, token, page_id)
+    await update.message.reply_text(f"✅ {platform.title()} account connected!")
+
+async def post_social_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if len(context.args) < 2:
+        await update.message.reply_text("Usage: /post <facebook|tiktok> <message>")
+        return
+    platform = context.args[0].lower()
+    message = " ".join(context.args[1:])
+    user_id = update.effective_user.id
+    result = await post_to_social(user_id, platform, message)
+    await update.message.reply_text(result)
+
+async def myaccounts(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    accounts = get_social_accounts(update.effective_user.id)
+    if not accounts:
+        await update.message.reply_text("No social accounts connected. Use /connect <platform> <token>")
+        return
+    lines = ["Connected accounts:"]
+    for a in accounts:
+        token_preview = a["access_token"][:10] + "..."
+        lines.append(f"- {a['platform']}: {token_preview}")
+    await update.message.reply_text("\n".join(lines))
 
 async def handle_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.message.document:
@@ -152,6 +190,9 @@ def main():
     app.add_handler(CommandHandler("tasks", list_tasks))
     app.add_handler(CommandHandler("done", done_task))
     app.add_handler(CommandHandler("deletetask", delete_task_command))
+    app.add_handler(CommandHandler("connect", connect_social))
+    app.add_handler(CommandHandler("post", post_social_command))
+    app.add_handler(CommandHandler("myaccounts", myaccounts))
     app.add_handler(MessageHandler(filters.Document.ALL | filters.PHOTO, handle_file))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     app.add_error_handler(error_handler)
