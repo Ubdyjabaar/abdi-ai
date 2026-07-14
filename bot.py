@@ -34,7 +34,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "- \"Schedule meeting tomorrow at 3pm\"\n"
         "- \"What events do I have?\"\n"
         "- \"Tell me a joke\"\n"
-        "- Send a PDF quiz to get it solved\n\n"
+        "- Send a PDF or photo of a quiz to get it solved\n\n"
         "Commands:\n"
         "/start - Start the bot\n"
         "/help - Show this help message"
@@ -89,17 +89,27 @@ async def delete_task_command(update: Update, context: ContextTypes.DEFAULT_TYPE
     except ValueError:
         await update.message.reply_text("Please provide a valid task ID.")
 
-async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    file = update.message.document
-    if not file.file_name.lower().endswith(".pdf"):
-        await update.message.reply_text("Please send a PDF file.")
+async def handle_file(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if update.message.document:
+        file = update.message.document
+        ext = file.file_name.lower()
+        if not ext.endswith(".pdf"):
+            await update.message.reply_text("Please send a PDF file.")
+            return
+        file_name = file.file_name
+    elif update.message.photo:
+        photo = update.message.photo[-1]
+        file = photo
+        file_name = "quiz_image.jpg"
+    else:
         return
-    await update.message.reply_text("Got your PDF! Solving the quiz...")
-    file_path = f"/tmp/{file.file_name}"
+
+    await update.message.reply_text("Got your file! Solving the quiz...")
+    file_path = f"/tmp/{file_name}"
     file_obj = await file.get_file()
     await file_obj.download_to_drive(file_path)
     try:
-        output_path = await solve_quiz_file(file_path, file.file_name)
+        output_path = await solve_quiz_file(file_path, file_name)
         with open(output_path, "rb") as f:
             await update.message.reply_document(f, caption="Quiz solved! ✅")
         os.remove(output_path)
@@ -142,7 +152,7 @@ def main():
     app.add_handler(CommandHandler("tasks", list_tasks))
     app.add_handler(CommandHandler("done", done_task))
     app.add_handler(CommandHandler("deletetask", delete_task_command))
-    app.add_handler(MessageHandler(filters.Document.ALL, handle_document))
+    app.add_handler(MessageHandler(filters.Document.ALL | filters.PHOTO, handle_file))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     app.add_error_handler(error_handler)
 

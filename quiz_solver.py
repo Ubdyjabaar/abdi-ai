@@ -1,4 +1,5 @@
 import os
+import base64
 import logging
 import tempfile
 from groq import Groq
@@ -17,7 +18,11 @@ def extract_text_from_pdf(file_path: str) -> str:
     doc.close()
     return text
 
-def solve_quiz(content: str) -> str:
+def encode_image(file_path: str) -> str:
+    with open(file_path, "rb") as f:
+        return base64.b64encode(f.read()).decode("utf-8")
+
+def solve_quiz_text(content: str) -> str:
     prompt = f"""Solve this quiz/exam. For each question:
 1. Write the question
 2. Provide the correct answer
@@ -35,6 +40,21 @@ Format the answer clearly with question numbers."""
     )
     return response.choices[0].message.content
 
+def solve_quiz_image(file_path: str) -> str:
+    image_data = encode_image(file_path)
+    response = client.chat.completions.create(
+        model="llama-3.2-90b-vision-preview",
+        messages=[{
+            "role": "user",
+            "content": [
+                {"type": "text", "text": "Solve this quiz/exam shown in the image. List each question, give the correct answer, and explain briefly."},
+                {"type": "image_url", "image_url": {"url": f"data:image/jpeg;base64,{image_data}"}}
+            ]
+        }],
+        temperature=0.1,
+    )
+    return response.choices[0].message.content
+
 def create_solved_document(original_name: str, solution_text: str) -> str:
     doc = Document()
     doc.add_heading(f"Solved: {original_name}", 0)
@@ -43,22 +63,23 @@ def create_solved_document(original_name: str, solution_text: str) -> str:
         if line.strip():
             doc.add_paragraph(line)
     
-    output_path = os.path.join(tempfile.gettempdir(), f"solved_{original_name}.docx")
+    output_path = os.path.join(tempfile.gettempdir(), f"solved_{os.path.splitext(original_name)[0]}.docx")
     doc.save(output_path)
     return output_path
 
 async def solve_quiz_file(file_path: str, file_name: str) -> str:
     logger.info(f"Solving quiz: {file_name}")
+    ext = file_name.lower()
     
-    if file_name.lower().endswith(".pdf"):
+    if ext.endswith(".pdf"):
         content = extract_text_from_pdf(file_path)
+        if not content.strip():
+            raise ValueError("Could not extract text from PDF")
+        solution = solve_quiz_text(content[:10000])
+    elif ext.endswith((".png", ".jpg", ".jpeg", ".gif", ".webp")):
+        solution = solve_quiz_image(file_path)
     else:
-        with open(file_path, "r", errors="ignore") as f:
-            content = f.read()
+        raise ValueError("Unsupported format. Send PDF or image.")
     
-    if not content.strip():
-        raise ValueError("Could not extract text from file")
-    
-    solution = solve_quiz(content[:10000])
     output_path = create_solved_document(file_name, solution)
     return output_path
