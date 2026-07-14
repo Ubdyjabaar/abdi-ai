@@ -8,17 +8,23 @@ from dotenv import load_dotenv
 from typing import Literal, TypedDict
 
 load_dotenv(Path(__file__).parent / ".env")
-from langchain_groq import ChatGroq
+from google import genai
+from google.genai import types
 from langgraph.graph import StateGraph, END
 from database import add_task, get_tasks, delete_task, complete_task, add_event, get_events
 
 logger = logging.getLogger(__name__)
 
-llm = ChatGroq(
-    model="llama-3.3-70b-versatile",
-    groq_api_key=os.getenv("GROQ_API_KEY"),
-    temperature=0.1,
-)
+gemini_key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
+client = genai.Client(api_key=gemini_key)
+
+def llm_call(prompt: str) -> str:
+    response = client.models.generate_content(
+        model="gemini-2.0-flash",
+        contents=prompt,
+        config=types.GenerateContentConfig(temperature=0.1),
+    )
+    return response.text
 
 class AgentState(TypedDict):
     user_id: int
@@ -41,8 +47,7 @@ def classify_intent(state: AgentState) -> dict:
 Message: "{state["message"]}"
 Respond with just the intent name."""
     
-    result = llm.invoke(prompt)
-    intent = result.content.strip().lower()
+    intent = llm_call(prompt).strip().lower()
     valid = {"add_task", "list_tasks", "complete_task", "delete_task", "add_event", "list_events", "chat"}
     if intent not in valid:
         intent = "chat"
@@ -71,8 +76,8 @@ def handle_list_tasks(state: AgentState) -> dict:
     return {"response": "\n".join(lines)}
 
 def handle_chat(state: AgentState) -> dict:
-    result = llm.invoke(f"You are ABDI AI assistant. Answer this: {state['message']}")
-    return {"response": result.content}
+    result = llm_call(f"You are ABDI AI assistant. Answer this: {state['message']}")
+    return {"response": result}
 
 import dateparser
 
@@ -87,9 +92,9 @@ If no date/time found, use date_description=null, time=null.
 Message: "{msg}"
 Return ONLY the JSON."""
     
-    result = llm.invoke(prompt)
+    result = llm_call(prompt)
     try:
-        data = json.loads(result.content.strip().strip("```json").strip("```").strip())
+        data = json.loads(result.strip().strip("```json").strip("```").strip())
         title = data.get("title", msg)
         date_desc = data.get("date_description")
         time_str = data.get("time")
