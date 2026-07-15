@@ -6,3 +6,4 @@ APScheduler==3.11.3
 dateparser==1.4.1
 PyMuPDF==1.27.2.3
 python-docx==1.2.0
+tornado==6.4.2
