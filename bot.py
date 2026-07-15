@@ -1,5 +1,4 @@
 import os
-import threading
 import logging
 from dotenv import load_dotenv
 from telegram import Update
@@ -165,22 +164,11 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     logger.error(f"Update {update} caused error {context.error}")
 
-def start_health_server():
-    port = int(os.environ.get("PORT", 8080))
-    from http.server import HTTPServer, BaseHTTPRequestHandler
-    class HealthHandler(BaseHTTPRequestHandler):
-        def do_GET(self):
-            self.send_response(200)
-            self.end_headers()
-            self.wfile.write(b"OK")
-        def log_message(self, *a):
-            pass
-    server = HTTPServer(("0.0.0.0", port), HealthHandler)
-    logger.info(f"Health server running on port {port}")
-    server.serve_forever()
+async def health(request):
+    return "OK"
 
 def main():
-    threading.Thread(target=start_health_server, daemon=True).start()
+    port = int(os.environ.get("PORT", 8080))
     init_db()
     app = Application.builder().token(BOT_TOKEN).post_init(start_scheduler).build()
 
@@ -197,8 +185,14 @@ def main():
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     app.add_error_handler(error_handler)
 
-    logger.info("Bot is starting polling...")
-    app.run_polling(allowed_updates=Update.ALL_TYPES, drop_pending_updates=True)
+    logger.info(f"Bot starting webhook on port {port}...")
+    app.run_webhook(
+        listen="0.0.0.0",
+        port=port,
+        webhook_url=f"https://abdi-ai.onrender.com/webhook",
+        allowed_updates=Update.ALL_TYPES,
+        drop_pending_updates=True,
+    )
 
 if __name__ == "__main__":
     main()
