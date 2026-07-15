@@ -164,9 +164,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
     logger.error(f"Update {update} caused error {context.error}")
 
-async def health(request):
-    return "OK"
-
 def main():
     port = int(os.environ.get("PORT", 8080))
     init_db()
@@ -189,6 +186,7 @@ def main():
     app.run_webhook(
         listen="0.0.0.0",
         port=port,
+        url_path="/webhook",
         webhook_url=f"https://abdi-ai.onrender.com/webhook",
         allowed_updates=Update.ALL_TYPES,
         drop_pending_updates=True,
